@@ -302,6 +302,9 @@ module LCBO
       image_url
     end
 
+    # https://aem.lcbo.com/content/dam/lcbo/products/0/6/5/5/065573.jpg.thumb.319.319.png
+    # https://aem.lcbo.com/content/dam/lcbo/products/0/6/5/5/065573.jpg.thumb.2048.2048.jpg
+    
     emits :image_url do
       doc.css('meta[property="og:image"]')[0].attr('content').match(/(.*)\.thumb.*/)[1] rescue nil
       # normalize_image_url("http://www.foodanddrink.ca/assets/products/720x720/#{id.to_s.rjust(7,'0')}.jpg")
@@ -315,8 +318,7 @@ module LCBO
     end
 
     emits :online_inventory do
-      0
-      # doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1] rescue 0
+      doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1].to_i rescue 0
     end
 
     # NO LONGER AVAILABLE

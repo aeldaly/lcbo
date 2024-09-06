@@ -7,6 +7,7 @@ module LCBO
   }.freeze
 
   def self.config
+    @config ||= nil
     reset_config! unless @config
     @config
   end

@@ -3,6 +3,7 @@ module SAQ
 
     include CrawlKit::Page
 
+    # BROKEN
     uri 'http://www.saq.com/webapp/wcs/stores/servlet/SAQStoreLocator?codeStore={id}&catalogId=50000&sousRegionId=&storeId=20002'
 
     FEATURE_FIELDS = {

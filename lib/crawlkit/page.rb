@@ -106,7 +106,7 @@
       end
 
       def request
-        return if @html
+        return if @html if defined?(@html)
         fire :before_request
         @response = request_prototype.request(query_params, body_params)
         @html     = @response.body
@@ -117,7 +117,7 @@
 
       def parse
         return if is_parsed?
-        return unless @html
+        return unless @html if defined?(@html)
         fire :before_parse
         @doc = Nokogiri::HTML(@html, nil, 'UTF-8')
         fire :after_parse

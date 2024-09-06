@@ -27,6 +27,7 @@
         end
 
         def callbacks
+          return [] unless defined?(@callbacks)
           @callbacks || []
         end
       end
