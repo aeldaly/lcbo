@@ -21,4 +21,6 @@ end
 require 'ext'
 require 'lcbo/helpers'
 require 'crawlkit'
+require "graphql/client"
+require "graphql/client/http"
 require 'lcbo/pages'

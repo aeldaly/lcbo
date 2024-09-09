@@ -1,6 +1,50 @@
 module LCBO
   class ProductPage
 
+  # Configure GraphQL endpoint using the basic HTTP network adapter.
+    GRAPHQL_HTTP = GraphQL::Client::HTTP.new("https://www.lcbo.com/graphql") do
+      def headers(context)
+        # Optionally set any HTTP headers
+        # { "User-Agent": "My Client" }
+        {}
+      end
+    end  
+
+    GRAPHQL_SCHEMA = GraphQL::Client.load_schema("schema.json")
+
+    GRAPHQL_CLIENT = GraphQL::Client.new(schema: GRAPHQL_SCHEMA, execute: GRAPHQL_HTTP)
+
+#     GRAPHQL_STORE_PRODUCT_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
+# query($sku: String!) {
+#   getProductStoreInventory(sku: $sku) {
+#     error
+#     status
+#     store {
+#       name
+#       stloc_identifier
+#       store_qty
+#     }
+#   }
+# }
+#     GRAPHQL
+
+    GRAPHQL_STORE_PRODUCT_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
+query($sku: String!) {
+  getStoreProductInventory(stlocIdentifier:"7", sku:[$sku]) {
+    error
+    status
+    products {
+      lcbo_upc_number
+      sku
+      store_qty
+      qty
+      qty_increments
+      threshold
+    }
+  }
+}
+    GRAPHQL
+
     include CrawlKit::Page
 
     uri 'https://www.lcbo.com/en/storeinventory/?sku={id}'
@@ -315,11 +359,32 @@ module LCBO
 
     emits :upc do
       # staging_lcbo_data.at('upcNumber').inner_text rescue nil
+
+      # USE GRAPHQL to find this data
+      result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
+      result.to_hash['data']['getStoreProductInventory']['products'][0]['lcbo_upc_number']      
     end
 
     emits :online_inventory do
-      doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1].to_i rescue 0
+      # html is updating using JS making this selector useless
+      # doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1].to_i rescue 0
+
+      # HeroFromEpisodeQuery = SWAPI::Client.parse <<-'GRAPHQL'
+      #   query($episode: Episode) {
+      #     hero(episode: $episode) {
+      #       name
+      #     }
+      #   }
+      # GRAPHQL
+
+      # USE GRAPHQL to find this data
+      result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
+      result.to_hash['data']['getStoreProductInventory']['products'][0]['qty']
+
+      # result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
+      # result.to_hash["data"]["getProductStoreInventory"]["store"][0]["store_qty"]
     end
+
 
     # NO LONGER AVAILABLE
     # def staging_lcbo_data
