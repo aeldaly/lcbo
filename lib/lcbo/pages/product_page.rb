@@ -10,7 +10,7 @@ module LCBO
       end
     end  
 
-    GRAPHQL_SCHEMA = GraphQL::Client.load_schema("schema.json")
+    GRAPHQL_SCHEMA = GraphQL::Client.load_schema("./schema.json")
 
     GRAPHQL_CLIENT = GraphQL::Client.new(schema: GRAPHQL_SCHEMA, execute: GRAPHQL_HTTP)
 
