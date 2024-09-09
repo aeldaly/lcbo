@@ -10,10 +10,10 @@ Gem::Specification.new do |s|
   s.summary     = %q{A library for parsing HTML pages from http://lcbo.com, http://bcliquorstores.com, http://saq.com}
   s.description = %q{Request and parse product, store, inventory, and product search pages directly from the official LCBO website.}
 
-  s.add_dependency 'typhoeus',      '~> 0.6.3'
-  s.add_dependency 'nokogiri',      '>= 1.5.0'
-  s.add_dependency 'unicode_utils', '~> 1.2.2'
-  s.add_dependency 'stringex',      '~> 1.3.0'
+  s.add_dependency 'typhoeus'      
+  s.add_dependency 'nokogiri'      
+  s.add_dependency 'unicode_utils'
+  s.add_dependency 'stringex'
 
   s.files         = `git ls-files`.split(?\n)
   s.test_files    = `git ls-files -- {test,spec}/*`.split(?\n)
