@@ -4,8 +4,6 @@ module LCBO
   # Configure GraphQL endpoint using the basic HTTP network adapter.
     GRAPHQL_HTTP = GraphQL::Client::HTTP.new("https://www.lcbo.com/graphql") do
       def headers(context)
-        # Optionally set any HTTP headers
-        # { "User-Agent": "My Client" }
         {}
       end
     end  
@@ -14,7 +12,7 @@ module LCBO
 
     GRAPHQL_CLIENT = GraphQL::Client.new(schema: GRAPHQL_SCHEMA, execute: GRAPHQL_HTTP)
 
-#     GRAPHQL_STORE_PRODUCT_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
+#     GRAPHQL_PRODUCT_STORE_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
 # query($sku: String!) {
 #   getProductStoreInventory(sku: $sku) {
 #     error
@@ -29,8 +27,8 @@ module LCBO
 #     GRAPHQL
 
     GRAPHQL_STORE_PRODUCT_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
-query($sku: String!) {
-  getStoreProductInventory(stlocIdentifier:"7", sku:[$sku]) {
+query($sku: String!, $store_id: String!) {
+  getStoreProductInventory(stlocIdentifier:$store_id, sku:[$sku]) {
     error
     status
     products {
@@ -55,21 +53,22 @@ query($sku: String!) {
     # uri 'https://www.lcbo.com/lcbo/product/name/{id}'
     # uri 'http://lcbo.com/lcbo-ear/lcbo/product/details.do?language=EN&itemNumber={id}'
 
-    on :after_parse,  :perform_real_request
+    on :after_parse,  :perform_additional_requests, :perform_graphql_request
     # on :after_parse,  :verify_product_details_form
     # on :after_parse,  :verify_product_name
     # on :after_parse,  :verify_third_info_cell
 
-    # emits :xdoc do
-    #   doc
-    # end
+
+    # FOR TESTING
+    # emits :xdoc; doc; end
+    # emits :graphql_response; @graphql_response; end
 
     emits :url do
       doc.css('link[rel=canonical]')[0].attr(:href) rescue nil
     end
 
     # Original url needs to be parsed for actual product page url and a 2nd request needs to be performed.
-    def perform_real_request
+    def perform_additional_requests
       if @real_request_performed
         # puts "ALREADY PERFORMED HIZZY"
       else
@@ -84,6 +83,10 @@ query($sku: String!) {
 
         # puts "HIZZAH"
       end
+    end
+
+    def perform_graphql_request
+      @graphql_response ||= GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id, store_id:self.store_id})
     end
 
     emits :id do
@@ -357,32 +360,25 @@ query($sku: String!) {
       # end
     end
 
-    emits :upc do
-      # staging_lcbo_data.at('upcNumber').inner_text rescue nil
-
-      # USE GRAPHQL to find this data
-      result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
-      result.to_hash['data']['getStoreProductInventory']['products'][0]['lcbo_upc_number']      
+    # Uses graphql endpoint
+    emits :store_qty do
+      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['store_qty']
     end
 
+    # Uses graphql endpoint
+    emits :upc do
+      # html is updated using JS making this selector useless
+      # staging_lcbo_data.at('upcNumber').inner_text rescue nil
+
+      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['lcbo_upc_number']
+    end
+
+    # Uses graphql endpoint
     emits :online_inventory do
-      # html is updating using JS making this selector useless
+      # html is updated using JS making this selector useless
       # doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1].to_i rescue 0
 
-      # HeroFromEpisodeQuery = SWAPI::Client.parse <<-'GRAPHQL'
-      #   query($episode: Episode) {
-      #     hero(episode: $episode) {
-      #       name
-      #     }
-      #   }
-      # GRAPHQL
-
-      # USE GRAPHQL to find this data
-      result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
-      result.to_hash['data']['getStoreProductInventory']['products'][0]['qty']
-
-      # result = GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id})
-      # result.to_hash["data"]["getProductStoreInventory"]["store"][0]["store_qty"]
+      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['qty']
     end
 
 
@@ -397,6 +393,10 @@ query($sku: String!) {
     #     nil
     #   end
     # end
+
+    def store_id
+      query_params[:store_id] || "217"
+    end
 
     def volume_helper
       @volume_helper ||= CrawlKit::VolumeHelper.new(package)

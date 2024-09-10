@@ -20,6 +20,11 @@ module LCBO
     ProductPage.process(:id => id).as_hash
   end
 
+  # store 217 is the LCBO flagship location
+  def self.product(id, store_id="217")
+    ProductPage.process(id:id, store_id:store_id).as_hash
+  end
+
   def self.store(id)
     StorePage.process(:id => id).as_hash
   end
