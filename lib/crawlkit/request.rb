@@ -35,6 +35,7 @@
 
       def uri
         template = request_prototype.uri_template.dup
+        return nil unless template
         query_params.reduce(template) do |mem, (key, value)|
           mem.gsub("{#{key}}", value.to_s)
         end
@@ -52,6 +53,7 @@
       end
 
       def _run(tries = 0)
+        return unless uri
         response = Timeout.timeout(LCBO.config[:timeout]) do
           Typhoeus::Request.new(uri, config).run
         end

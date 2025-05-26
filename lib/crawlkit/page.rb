@@ -109,7 +109,7 @@
         return if @html if defined?(@html)
         fire :before_request
         @response = request_prototype.request(query_params, body_params)
-        @html     = @response.body
+        @html     = @response.body rescue ""
 
         fire :after_request
         self

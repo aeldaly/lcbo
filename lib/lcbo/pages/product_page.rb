@@ -12,94 +12,153 @@ module LCBO
 
     GRAPHQL_CLIENT = GraphQL::Client.new(schema: GRAPHQL_SCHEMA, execute: GRAPHQL_HTTP)
 
-#     GRAPHQL_PRODUCT_STORE_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
-# query($sku: String!) {
-#   getProductStoreInventory(sku: $sku) {
-#     error
-#     status
-#     store {
-#       name
-#       stloc_identifier
-#       store_qty
-#     }
-#   }
-# }
-#     GRAPHQL
-
-    GRAPHQL_STORE_PRODUCT_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
-query($sku: String!, $store_id: String!) {
-  getStoreProductInventory(stlocIdentifier:$store_id, sku:[$sku]) {
+    GRAPHQL_PRODUCT_STORE_INV_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
+query($sku: String!) {
+  getProductStoreInventory(sku: $sku) {
     error
     status
-    products {
-      lcbo_upc_number
-      sku
+    store {
+      name
+      stloc_identifier
       store_qty
-      qty
-      qty_increments
-      threshold
+      available_sdp
     }
   }
 }
     GRAPHQL
 
+    GRAPHQL_PRODUCT_QUERY = GRAPHQL_CLIENT.parse <<-'GRAPHQL'
+query($sku: String!){
+  products(
+    # search: "house"
+    filter: {
+      sku: {eq: $sku}
+    }
+    pageSize: 20
+    currentPage: 1
+    sort: {}
+  ) {
+    items {
+      bv_avg_rating
+      bv_avg_reviews
+      canonical_url
+      color
+      country_of_manufacture
+      created_at
+      id
+      image {
+        url
+      }
+      lcbo_alcohol_percent
+      lcbo_basic_price
+      lcbo_kosher
+      lcbo_producer_name
+      lcbo_region_name
+      lcbo_subregion_name
+      lcbo_unit_volume
+      lcbo_upc_number
+      lcbo_varietal_name
+      lcbo_vintage_release_date
+      lcbo_vqa_code
+      loyalty_offer
+      loyalty_promo {
+        loyalty_enddate
+        loyalty_points
+        type
+      }
+      manufacturer
+      meta_description
+      meta_keyword
+      meta_title
+      name
+      only_x_left_in_stock
+      price_range {
+        maximum_price {
+            regular_price {
+              currency
+              value
+            }
+            final_price {
+              currency
+              value              
+            }
+        }
+        minimum_price {
+          regular_price {
+            currency
+            value
+          }
+          final_price {
+            currency
+            value              
+          }
+          discount {
+            amount_off
+            percent_off
+          }
+        }
+      }
+      qty
+      sku
+      special_price
+      special_to_date
+      stock_status
+      uid
+    }
+    page_info {
+      current_page
+      page_size
+      total_pages
+    }
+    sort_fields {
+      default
+    }
+    suggestions {
+      search
+    }
+    total_count
+  }
+}
+    GRAPHQL
+
+
     include CrawlKit::Page
+    # LEFT BLANK so we don't try and scrape html page
+    # uri 'https://www.lcbo.com/en/storeinventory/?sku={id}'
 
-    uri 'https://www.lcbo.com/en/storeinventory/?sku={id}'
-
-    # I CANNOT USE This url b/c it uses JS to update
-    # uri 'https://www.lcbo.com/en/catalogsearch/result/#q={id}'
-
-    # uri 'https://www.lcbo.com/lcbo/product/name/{id}'
-    # uri 'http://lcbo.com/lcbo-ear/lcbo/product/details.do?language=EN&itemNumber={id}'
-
-    on :after_parse,  :perform_additional_requests, :perform_graphql_request
-    # on :after_parse,  :verify_product_details_form
-    # on :after_parse,  :verify_product_name
-    # on :after_parse,  :verify_third_info_cell
-
+    on :after_parse,  :perform_graphql_request
 
     # FOR TESTING
     # emits :xdoc; doc; end
-    # emits :graphql_response; @graphql_response; end
+    # emits :graphql_response do
+    #   @graphql_product_query_response.to_hash['data']['products']['items'][0]
+    # end
+
 
     emits :url do
-      doc.css('link[rel=canonical]')[0].attr(:href) rescue nil
-    end
-
-    # Original url needs to be parsed for actual product page url and a 2nd request needs to be performed.
-    def perform_additional_requests
-      if @real_request_performed
-        # puts "ALREADY PERFORMED HIZZY"
-      else
-        @real_request_performed = true
-        real_request_url = doc.css('h1 a[title="Product Name"]')[0].attr(:href)
-
-        @response = Timeout.timeout(LCBO.config[:timeout]) do
-          Typhoeus::Request.new(real_request_url, {method:'GET'}).run
-        end
-        @html     = @response.body
-        @doc      = Nokogiri::HTML(@html, nil, 'UTF-8')
-
-        # puts "HIZZAH"
-      end
+      # doc.css('link[rel=canonical]')[0].attr(:href) rescue nil
+      "https://www.lcbo.com/en/#{graphql_product_hash['canonical_url']}"
     end
 
     def perform_graphql_request
-      @graphql_response ||= GRAPHQL_CLIENT.query(GRAPHQL_STORE_PRODUCT_INV_QUERY, variables: {sku: self.id, store_id:self.store_id})
+      @graphql_product_query_response ||= GRAPHQL_CLIENT.query(GRAPHQL_PRODUCT_QUERY, variables: {sku: self.sku})
     end
 
-    emits :id do
-      query_params[:id].to_i
+    emits :sku do
+      query_params[:sku].to_i
     end
 
     emits :code2 do
-      doc.css('meta[name="pageId"]')[0].attr(:content) rescue nil
+      # doc.css('meta[name="pageId"]')[0].attr(:content) rescue nil
     end
 
     emits :name do
-      # CrawlKit::TitleCaseHelper[doc.css("#ProductInfoName_#{id}")[0].content]
-      CrawlKit::TitleCaseHelper[doc.css('title')[0].content.split(' | ').first]
+      # CrawlKit::TitleCaseHelper[doc.css('title')[0].content.split(' | ').first]
+      graphql_product_hash['name']
+    end
+
+    emits :country_of_manufacture do
+      graphql_product_hash['country_of_manufacture']
     end
 
     emits :tags do
@@ -114,116 +173,51 @@ query($sku: String!, $store_id: String!) {
     end
 
     emits :price_in_cents do
-      (doc.css('meta[property="product:price:amount"]')[0].attr('content').strip.to_f * 100).round rescue 0
+      ((graphql_product_hash['special_price'] || graphql_product_hash['price_range']['minimum_price']['regular_price']['value']) * 100).round
     end
 
     emits :sale_price_in_cents do
-      if limited_time_offer_ends_on
-        (doc.css('span[data-price-type="finalPrice"]')[0].attr('data-price-amount').to_f * 100).round rescue 0
+      if graphql_product_hash['special_price']
+        (graphql_product_hash['special_price'] * 100).round
       else
         0
       end
     end
 
     emits :regular_price_in_cents do
-      if limited_time_offer_ends_on
-        (doc.css('span[data-price-type="oldPrice"]')[0].attr('data-price-amount').to_f * 100).round rescue 0
-        # sale_price_in_cents
-      else
-        price_in_cents
-      end
+      (graphql_product_hash['price_range']['minimum_price']['regular_price']['value'] * 100).round
     end
 
     emits :limited_time_offer_savings_in_cents do
+      (graphql_product_hash['price_range']['minimum_price']['discount']['amount_off'] * 100).round
       regular_price_in_cents - price_in_cents
     end
 
     emits :limited_time_offer_ends_on do
-      begin
-        x = doc.css('.limited-text')[0].content
-        y = x.match(/Sale Ends\: (.*)/)[1]
-        Date.parse(y).to_s
-      rescue
-        nil
-      end
+      Date.parse(graphql_product_hash['special_to_date']).to_s rescue nil
     end
 
     emits :bonus_reward_miles do
-      if has_bonus_reward_miles
-        doc.css('.airmiles-section span')[0].content.match(/(\d+)/)[1].to_f
-      else
-        0
-      end
+      graphql_product_hash['loyalty_promo'][0]['loyalty_points'] rescue 0
     end
 
     emits :bonus_reward_miles_ends_on do
-      if has_bonus_reward_miles
-        x = doc.css('.airmiles-section')[0].content.match(/Until.([a-zA-Z]+ \d+ ?, ?\d+)/)[1]
-        Date.parse(x).to_s
-      else
-        nil
-      end
+      Date.parse(graphql_product_hash['loyalty_promo'][0]['loyalty_enddate']).to_s rescue nil
     end
 
     # emits :stock_type do
-    #   product_details_form('stock type')
-    # end
-
-    # REDO
-    # emits :type do
-    #   [
-    #     primary_category,
-    #     secondary_category,
-    #     varietal,
-    #   ].compact
-    # end
-
-    # REDO
-    # emits :primary_category do
-    #   doc.css('#WC_BreadCrumb_Link_1')[0].content.strip
-    # end
-
-    # REDO
-    # emits :secondary_category do
-    #   doc.css('#WC_BreadCrumb_Link_2')[0].content.strip
     # end
 
 
     emits :origin do
-      origin_match = product_details_form("Made In")
-      if origin_match
-        place = origin_match.
-          gsub('Made in: ', '').
-          gsub('/Californie', '').
-          gsub('Bosnia\'Hercegovina', 'Bosnia and Herzegovina').
-          gsub('Is. Of', 'Island of').
-          gsub('Italy Quality', 'Italy').
-          gsub('Usa-', '').
-          gsub(', Rep. Of', '').
-          gsub('&', 'and').
-          gsub('Region Not Specified, ', '')
-        place.split(',').map{ |s| s.strip }.uniq.join(', ')
-      end
+      [graphql_product_hash['lcbo_region_name'], graphql_product_hash['lcbo_subregion_name']].compact.join(", ")
     end
 
     # emits :package do
-    #   result = product_details_form.find do |k,v|
-    #     x = k.match(/(\d+) mL [bottle|gift]/i)
-    #     x ? x : nil
-    #   end rescue nil
-
-    #   result ? result[0] : nil
-    # end
+   # end
 
     # emits :package_unit_type do
     #   volume_helper.unit_type
-    # end
-
-    # REDO
-    # emits :volume_in_milliliters do
-    #   #TODO FIX: package is null
-    #   result = package.match(/(\d+) mL [bottle|gift]/i)
-    #   result[1].to_i if result
     # end
 
     # emits :total_package_units do
@@ -234,12 +228,12 @@ query($sku: String!, $store_id: String!) {
     #   volume_helper.package_volume
     # end
 
-    # emits :volume_in_milliliters do
-    #   CrawlKit::VolumeHelper[package]
-    # end
+    emits :volume_in_milliliters do
+      graphql_product_hash['lcbo_unit_volume'].match(/(\d*)/)[1].to_i rescue nil
+    end
 
     emits :alcohol_content do
-      product_details_form("Alcohol/Vol").to_f
+      graphql_product_hash['lcbo_alcohol_percent'].to_f
     end
 
     # emits :price_per_liter_of_alcohol_in_cents do
@@ -267,12 +261,11 @@ query($sku: String!, $store_id: String!) {
     # end
 
     emits :producer_name do
-      product_details_form("By")
+      graphql_product_hash["lcbo_producer_name"]
     end
 
     emits :varietal do
-      product_details_form("Varietal")
-      # staging_lcbo_data.at('wineVarietal').inner_text rescue nil
+      graphql_product_hash["lcbo_varietal_name"]
     end
 
     emits :board do
@@ -281,7 +274,7 @@ query($sku: String!, $store_id: String!) {
 
 
     emits :released_on do
-      product_details_form("Release Date")
+      Date.parse(graphql_product_hash['lcbo_vintage_release_date']).to_s rescue nil
     end
 
     # emits :is_discontinued do
@@ -290,11 +283,10 @@ query($sku: String!, $store_id: String!) {
 
     emits :has_limited_time_offer do
       sale_price_in_cents != 0
-      # html.include?('Limited Time Offer')
     end
 
     emits :has_bonus_reward_miles do
-      html.include?('Bonus AIR MILES') && !doc.css('.share-links .airmiles-section').empty?
+      Date.parse(bonus_reward_miles_ends_on) >= Date.today rescue false
     end
 
     # emits :has_value_added_promotion do
@@ -306,15 +298,15 @@ query($sku: String!, $store_id: String!) {
     # end
 
     emits :is_vqa do
-      html.include?("This is a VQA wine")
+      graphql_product_hash["lcbo_vqa_code"] == 1
     end
 
     emits :is_kosher do
-      html.include?('This is a Kosher product.')
+      graphql_product_hash["lcbo_kosher"] == 1
     end
 
     emits :description do
-      doc.css('.testing_note')[0].content rescue nil
+      graphql_product_hash["meta_description"]
     end
 
     # emits :serving_suggestion do
@@ -340,71 +332,41 @@ query($sku: String!, $store_id: String!) {
 
     # emits :image_thumb_url do
     #   if (img = doc.css('#image_holder img').first)
-    #     normalize_image_url(img[:src])
     #   end
     # end
 
     emits :label_url do
-      # normalize_image_url("http://www.foodanddrink.ca/assets/products/720x720/#{id.to_s.rjust(7,'0')}.jpg")
       image_url
     end
 
-    # https://aem.lcbo.com/content/dam/lcbo/products/0/6/5/5/065573.jpg.thumb.319.319.png
-    # https://aem.lcbo.com/content/dam/lcbo/products/0/6/5/5/065573.jpg.thumb.2048.2048.jpg
-    
     emits :image_url do
-      doc.css('meta[property="og:image"]')[0].attr('content').match(/(.*)\.thumb.*/)[1] rescue nil
-      # normalize_image_url("http://www.foodanddrink.ca/assets/products/720x720/#{id.to_s.rjust(7,'0')}.jpg")
-      # if (img = doc.css('img#productMainImage').first)
-      #   normalize_image_url(img[:src])
-      # end
+      graphql_product_hash['image']['url']
     end
 
-    # Uses graphql endpoint
-    emits :store_qty do
-      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['store_qty']
-    end
-
-    # Uses graphql endpoint
     emits :upc do
-      # html is updated using JS making this selector useless
-      # staging_lcbo_data.at('upcNumber').inner_text rescue nil
-
-      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['lcbo_upc_number']
+      graphql_product_hash['lcbo_upc_number']
     end
 
-    # Uses graphql endpoint
     emits :online_inventory do
       # html is updated using JS making this selector useless
       # doc.css('.home-shipping-available')[0].content.strip.match(/(\d*) available/)[1].to_i rescue 0
 
-      @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['qty']
+      # @graphql_response.to_hash['data']['getStoreProductInventory']['products'][0]['qty']
+      graphql_product_hash['qty']
+    end
+
+    def graphql_product_hash
+      @graphql_product_query_response.to_hash['data']['products']['items'][0]
     end
 
 
-    # NO LONGER AVAILABLE
-    # def staging_lcbo_data
-    #   @staging_lcbo_data =
-    #   begin
-    #     upc_path = "http://stage.lcbo.com/lcbo-webapp/productdetail.do?itemNumber=%s" % id
-    #     xml = open(upc_path)
-    #     Nokogiri::XML(xml)
-    #   rescue
-    #     nil
-    #   end
+    # def volume_helper
+    #   @volume_helper ||= CrawlKit::VolumeHelper.new(package)
     # end
 
-    def store_id
-      query_params[:store_id] || "217"
-    end
-
-    def volume_helper
-      @volume_helper ||= CrawlKit::VolumeHelper.new(package)
-    end
-
-    def has_package?
-      !info_cell_lines[2].include?('Price:')
-    end
+    # def has_package?
+    #   !info_cell_lines[2].include?('Price:')
+    # end
 
     def stock_category
       cat = get_info_lines_at_offset(12).reject do |line|
@@ -417,24 +379,6 @@ query($sku: String!, $store_id: String!) {
         l.include?('NOTE:')
       end.first
       cat ? cat.strip : nil
-    end
-
-    def product_details_form(name=nil)
-      if name && @product_details_hash
-        @product_details_hash[name]
-      elsif name
-        @product_details_hash = {}
-      
-        doc.css("#moredetail li").each do |x|
-          @product_details_hash[x.css('div')[0].content.strip] = x.css('div')[1].content.strip
-        end
-
-        product_details_form(name)
-      else
-        @product_details_hash
-      end
-    rescue
-      raise "Unable to parse product-details-list"
     end
 
     def get_info_lines_at_offset(offset)
@@ -474,46 +418,6 @@ query($sku: String!, $store_id: String!) {
       doc.css('table[width="478"] td[height="271"] td[colspan="2"].main_font')[0]
     end
 
-    def normalize_image_url(url)
-      return unless url
-      url = url.include?('http://') ? url : File.join('http://www.lcbo.com', url)
-
-      response = Typhoeus.get(url, followlocation:true)
-      url = response.effective_url
-
-      return unless [200].include? response.code
-      return if url.include?('default')
-      return if url.include?('generic')
-
-      url
-    rescue
-      nil
-    end
-
-    # def verify_third_info_cell
-    #   return unless has_package? && info_cell_lines[2][0,1] != '|'
-    #   raise CrawlKit::MalformedError,
-    #     "Expected third line in info cell to begin with bar. LCBO No: " \
-    #     "#{id}, Dump: #{info_cell_lines[2].inspect}"
-    # end
-
-    # def verify_response_not_blank
-    #   return unless html.strip == ''
-    #   raise CrawlKit::NotFoundError,
-    #     "product #{id} does not appear to exist"
-    # end
-
-    # def verify_product_name
-    #   return unless product_details_form('itemName').strip == ''
-    #   raise CrawlKit::NotFoundError,
-    #     "can not locate name for product #{id}"
-    # end
-
-    # def verify_product_details_form
-    #   return unless doc.css('form[name="productdetails"]').empty?
-    #   raise CrawlKit::MalformedError,
-    #     "productdetails form not found in doc for product #{id}"
-    # end
 
   end
 end
