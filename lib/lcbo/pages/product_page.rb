@@ -136,12 +136,12 @@ query($sku: String!){
 
 
     emits :url do
-      # doc.css('link[rel=canonical]')[0].attr(:href) rescue nil
       "https://www.lcbo.com/en/#{graphql_product_hash['canonical_url']}"
     end
 
     def perform_graphql_request
       @graphql_product_query_response ||= GRAPHQL_CLIENT.query(GRAPHQL_PRODUCT_QUERY, variables: {sku: self.sku})
+      raise 'SKU not found' if graphql_product_hash.nil?
     end
 
     emits :sku do
